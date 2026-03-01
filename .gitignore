@@ -1,0 +1,4 @@
+# Ignore secrets
+supabase/.secrets
+
+supabase/config.toml
