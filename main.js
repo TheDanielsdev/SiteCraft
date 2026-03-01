@@ -208,16 +208,15 @@ function initiatePayment() {
         { display_name: 'Plan',  variable_name: 'plan',  value: selectedPlan.name }
       ]
     },
-    callback: function(response) {
-        btn.disabled    = false;
-        btn.innerHTML   = '🔒 Pay & Start Building';
-        paystackRef     = response.reference;
-      
-        showToast('Payment received! Confirming…', 'success');
-        
-        // Call async function safely
-        confirmPayment(paystackRef);
-      },
+    callback(response) {
+      btn.disabled    = false;
+      btn.innerHTML   = '🔒 Pay & Start Building';
+      paystackRef     = response.reference;
+
+      showToast('Payment received! Confirming…', 'success');
+      // Paystack requires a sync callback — kick off async work separately
+      confirmPayment(paystackRef);
+    },
     onClose() {
       btn.disabled    = false;
       btn.innerHTML   = '🔒 Pay & Start Building';
@@ -368,18 +367,45 @@ function animateGenSteps() {
 //  SUPABASE EDGE FUNCTION HELPER
 // ─────────────────────────────────────────────────────────────
 async function callEdgeFunction(fnName, body) {
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
+  // Always get a fresh session from Supabase storage
+  const { data: { session: freshSession }, error: sessionError } = await sb.auth.getSession();
+
+  if (sessionError || !freshSession) {
+    // Try a refresh as fallback
+    const { data: refreshData } = await sb.auth.refreshSession();
+    if (!refreshData?.session) {
+      openAuthModal('login');
+      throw new Error('Not authenticated — please sign in and try again.');
+    }
+    currentSession = refreshData.session;
+    currentUser    = refreshData.session.user;
+  } else {
+    currentSession = freshSession;
+    currentUser    = freshSession.user;
+  }
+
+  const token = currentSession.access_token;
+  console.log('[callEdgeFunction]', fnName, 'token prefix:', token?.slice(0, 20));
 
   const res = await fetch(`${SUPABASE_URL}/functions/v1/${fnName}`, {
     method:  'POST',
     headers: {
       'Content-Type':  'application/json',
-      'Authorization': `Bearer ${session.access_token}`,
+      'Authorization': `Bearer ${token}`,
       'apikey':        SUPABASE_ANON
     },
     body: JSON.stringify(body)
   });
+
+  console.log('[callEdgeFunction]', fnName, 'status:', res.status);
+
+  if (res.status === 401) {
+    const errBody = await res.text();
+    console.error('[callEdgeFunction] 401 body:', errBody);
+    showToast('Session expired. Please sign in again.', 'error');
+    openAuthModal('login');
+    throw new Error('Session expired');
+  }
 
   return res.json();
 }

@@ -1097,35 +1097,42 @@
 
   <!-- Step 2 -->
   <div class="builder-step" id="bs-2">
-    <div class="step-title">Tell us about yourself</div>
-    <div class="step-desc">This info will appear on your website.</div>
+    <div class="step-title">Tell us about your business</div>
+    <div class="step-desc">The more specific you are, the better your landing page copy will be.</div>
     <div class="builder-grid">
       <div class="form-group">
-        <label>Name / Business Name</label>
-        <input type="text" id="b_name" placeholder="e.g. Emeka Designs">
+        <label>Business / Product Name *</label>
+        <input type="text" id="b_name" placeholder="e.g. Naija Eats, FlowTrack">
       </div>
       <div class="form-group">
-        <label>Tagline / Short Description</label>
-        <input type="text" id="b_tagline" placeholder="e.g. Crafting bold digital experiences">
+        <label>Tagline</label>
+        <input type="text" id="b_tagline" placeholder="e.g. Food delivery in 30 mins">
       </div>
     </div>
     <div class="form-group">
-      <label>Describe your business or yourself</label>
-      <textarea id="b_desc" placeholder="Tell us what you do, who you serve, and what makes you unique..."></textarea>
+      <label>What do you do and what problem do you solve? *</label>
+      <textarea id="b_desc" placeholder="e.g. We help Lagos SME owners build a professional website in minutes using AI — no coding needed, no expensive developers..."></textarea>
+      <div style="font-size:0.72rem; color:var(--muted); margin-top:5px;">Be specific — mention your offer, your audience, and what makes you different.</div>
     </div>
     <div class="builder-grid">
       <div class="form-group">
-        <label>Phone / WhatsApp</label>
-        <input type="text" id="b_phone" placeholder="080XXXXXXXX">
+        <label>Target Audience</label>
+        <input type="text" id="b_audience" placeholder="e.g. Nigerian SME owners aged 25–45">
+      </div>
+      <div class="form-group">
+        <label>Primary CTA Text</label>
+        <input type="text" id="b_cta" placeholder="e.g. Get Started, Order Now, Book a Call">
+      </div>
+    </div>
+    <div class="builder-grid">
+      <div class="form-group">
+        <label>WhatsApp / Phone</label>
+        <input type="text" id="b_phone" placeholder="+234 801 234 5678">
       </div>
       <div class="form-group">
         <label>Email</label>
         <input type="text" id="b_email" placeholder="hello@yourbrand.com">
       </div>
-    </div>
-    <div class="form-group">
-      <label>Location / Address (optional)</label>
-      <input type="text" id="b_location" placeholder="e.g. Lagos, Nigeria">
     </div>
     <button class="btn-back-step" onclick="goStep(1)">← Back</button>
     <button class="btn-next" onclick="goStep(3)">Continue →</button>
