@@ -56,7 +56,7 @@
     --danger: #ff4d6d;
   }
 
-  html { scroll-behavior: smooth; }
+  html { scroll-behavior: smooth; overflow-x: hidden; }
 
   body {
     font-family: 'DM Sans', sans-serif;
@@ -841,6 +841,7 @@
     padding: 40px;
     max-width: 500px;
     width: 100%;
+    box-sizing: border-box;
     animation: fadeUp 0.3s ease;
   }
 
@@ -913,13 +914,143 @@
   #dashBtn { background:transparent; border:1px solid var(--border); color:var(--muted); }
   #dashBtn:hover { border-color:var(--accent); color:var(--accent); }
 
-  /* RESPONSIVE */
+  /* ── RESPONSIVE ─────────────────────────────────────────── */
+
+  /* Tablet — 768px */
+  @media (max-width: 768px) {
+    .pricing-grid { grid-template-columns: repeat(2, 1fr); }
+    .website-types { grid-template-columns: repeat(3, 1fr); }
+    .style-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+
+  /* Mobile — 640px */
   @media (max-width: 640px) {
-    nav { padding: 16px 20px; }
-    .website-types { grid-template-columns: repeat(2, 1fr); }
+
+    /* NAV — collapse to logo + single CTA */
+    nav {
+      padding: 14px 16px;
+    }
+    .nav-right {
+      gap: 6px !important;
+    }
+    #userInfo { display: none !important; }
+    #authBtns button:first-child { display: none; } /* hide Sign In, keep Sign Up */
+    .nav-btn {
+      padding: 8px 14px;
+      font-size: 0.75rem;
+      /* remove clip-path on mobile — it clips text */
+      clip-path: none !important;
+      border-radius: 4px;
+    }
+    #dashBtn { display: none !important; }
+
+    /* HERO */
+    #landing { padding: 100px 16px 60px; }
+    h1.hero-title { font-size: clamp(2rem, 9vw, 2.8rem); }
+    .hero-sub { font-size: 1rem; }
+    .hero-cta { flex-direction: column; align-items: stretch; }
+    .hero-cta .btn-primary,
+    .hero-cta .btn-ghost {
+      width: 100%;
+      text-align: center;
+      clip-path: none !important;
+      border-radius: 6px;
+      padding: 14px 20px;
+    }
+    .hero-stats {
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .stat-num { font-size: 1.5rem; }
+
+    /* PRICING */
+    #pricing { padding: 60px 16px; }
+    .pricing-grid { grid-template-columns: 1fr; gap: 16px; }
+    .plan-card { padding: 24px 20px; }
+
+    /* CHECKOUT */
+    #checkout { padding: 80px 16px 40px; }
+    .checkout-card { padding: 24px 18px; }
+
+    /* BUILDER */
+    #builder { padding: 80px 16px 40px; }
+    .step-indicator { gap: 0; overflow-x: auto; padding-bottom: 8px; }
+    .step-dot { width: 28px; height: 28px; font-size: 0.7rem; }
+    .step-label { font-size: 0.6rem; }
+    .website-types { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .type-card { padding: 16px 10px; }
+    .type-icon { font-size: 1.4rem; }
+    .type-name { font-size: 0.78rem; }
     .builder-grid { grid-template-columns: 1fr; }
-    .hero-stats { gap: 28px; }
-    .checkout-card { padding: 32px 24px; }
+    .style-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .color-options { gap: 8px; }
+    .section-options { grid-template-columns: 1fr 1fr; }
+
+    /* FORM INPUTS full-width */
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+      font-size: 16px; /* prevents iOS zoom */
+    }
+
+    /* GENERATING */
+    #generating { padding: 80px 16px; }
+    .gen-title { font-size: 1.4rem; }
+    .gen-steps { padding: 0 4px; }
+
+    /* RESULT */
+    #result { padding: 80px 16px 40px; }
+    #previewFrame { height: 360px; }
+    .result-actions { flex-direction: column; align-items: stretch; }
+    .btn-download,
+    .btn-new {
+      width: 100%;
+      text-align: center;
+      clip-path: none !important;
+      border-radius: 6px;
+      padding: 14px 20px;
+      justify-content: center;
+    }
+
+    /* MODALS */
+    .modal-overlay { padding: 12px; align-items: flex-end !important; }
+    .modal {
+      padding: 28px 20px;
+      border-radius: 12px 12px 0 0;
+      max-height: 92vh;
+      overflow-y: auto;
+    }
+    .modal-btns { flex-direction: column; }
+    .btn-sm-primary,
+    .btn-sm-ghost { width: 100%; text-align: center; }
+
+    /* DASHBOARD MODAL */
+    #dashboardModal .modal {
+      border-radius: 12px 12px 0 0;
+      max-height: 85vh;
+    }
+    .dash-item { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .dash-item-actions { width: 100%; }
+    .dash-btn { flex: 1; text-align: center; }
+
+    /* FOOTER */
+    footer { padding: 32px 16px; }
+
+    /* TOAST */
+    .toast { left: 16px; right: 16px; bottom: 16px; max-width: 100%; }
+
+    /* PREVENT horizontal overflow from fixed-width elements */
+    * { max-width: 100%; }
+    pre, code { white-space: pre-wrap; word-break: break-all; }
+  }
+
+  /* Extra small — 380px */
+  @media (max-width: 380px) {
+    h1.hero-title { font-size: 1.9rem; }
+    .website-types { grid-template-columns: 1fr 1fr; }
+    .section-options { grid-template-columns: 1fr; }
+    .nav-btn { padding: 7px 10px; font-size: 0.7rem; }
   }
 </style>
 </head>
@@ -957,7 +1088,7 @@
 <!-- NAV -->
 <nav>
   <div class="logo">Site<span>Craft</span></div>
-  <div class="nav-right" style="display:flex; align-items:center; gap:10px;">
+  <div class="nav-right" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
     <span id="userInfo" style="display:none; font-size:0.8rem; color:var(--muted); cursor:pointer;" onclick="openDashboard()"></span>
     <div id="authBtns" style="display:flex; gap:8px;">
       <button class="nav-btn" style="background:transparent; border:1px solid var(--border); color:var(--text);" onclick="openAuthModal('login')">Sign In</button>
@@ -1300,7 +1431,7 @@
       AI-powered landing pages for Nigerian businesses. Built and managed by Segun-Daniels Software Consulting.
     </p>
     <div style="display:flex; gap:20px; justify-content:center; margin-bottom:20px; flex-wrap:wrap;">
-      <a href="mailto:hello@sitecraft.ng" style="color:var(--muted); font-size:0.8rem; text-decoration:none;">✉️ sgsoftwareconsulting@gmail.com</a>
+      <a href="/cdn-cgi/l/email-protection#167e737a7a7956657f62737564777062387871" style="color:var(--muted); font-size:0.8rem; text-decoration:none;">✉️ <span class="__cf_email__" data-cfemail="c6aea3aaaaa986b5afb2a3a5b4a7a0b2e8a8a1">[email&#160;protected]</span></a>
       <a href="https://wa.me/2347060563133" style="color:var(--muted); font-size:0.8rem; text-decoration:none;">📱 WhatsApp Support</a>
     </div>
     <div style="border-top:1px solid var(--border); padding-top:16px; color:var(--muted); font-size:0.75rem;" id="footerCopyright"></div>
@@ -1309,6 +1440,8 @@
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
 
 <script>
   // Auto-updating copyright
