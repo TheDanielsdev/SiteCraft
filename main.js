@@ -208,14 +208,16 @@ function initiatePayment() {
         { display_name: 'Plan',  variable_name: 'plan',  value: selectedPlan.name }
       ]
     },
-    async callback(response) {
-      btn.disabled    = false;
-      btn.innerHTML   = '🔒 Pay & Start Building';
-      paystackRef     = response.reference;
-
-      showToast('Payment received! Confirming…', 'success');
-      await confirmPayment(paystackRef);
-    },
+    callback: function(response) {
+        btn.disabled    = false;
+        btn.innerHTML   = '🔒 Pay & Start Building';
+        paystackRef     = response.reference;
+      
+        showToast('Payment received! Confirming…', 'success');
+        
+        // Call async function safely
+        confirmPayment(paystackRef);
+      },
     onClose() {
       btn.disabled    = false;
       btn.innerHTML   = '🔒 Pay & Start Building';
