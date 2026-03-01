@@ -1,31 +1,35 @@
 // ─────────────────────────────────────────────────────────────
-//  SiteCraft — main.js
-//  Supabase Auth + Edge Functions (no API keys in browser)
+//  SiteCraft — main.js  v2
+//  Features: persistent session, dashboard, SEO, Nigerian market
 // ─────────────────────────────────────────────────────────────
 
-// ── CONFIG — fill these in after creating your Supabase project ──
 const SUPABASE_URL     = 'https://zmmrersjvlapqhfndlno.supabase.co';
 const SUPABASE_ANON    = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InptbXJlcnNqdmxhcHFoZm5kbG5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNzg0OTAsImV4cCI6MjA4Nzk1NDQ5MH0.neynEzGdJsjuH5RE_vtcY1TJ2kgspyBAmgjTF2ItGMI';
 const PAYSTACK_PUB_KEY = 'pk_test_0382ed3e2734cca81d7d4a3c832d7457bcf9c5da';
-// ─────────────────────────────────────────────────────────────────
 
-// Supabase JS loaded via CDN in index.html
 const { createClient } = supabase;
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON, {
+  auth: {
+    persistSession:    true,       // ← keeps session across refreshes
+    autoRefreshToken:  true,
+    detectSessionInUrl: true
+  }
+});
 
-// State
-let currentUser     = null;
-let currentSession  = null;
-let selectedPlan    = null;
-let currentStep     = 1;
-let selectedColor   = '#2563eb';
-let selectedStyle   = '';
-let selectedType    = '';
-let generatedHTML   = '';
-let paystackRef     = null;   // set after successful payment
+// ── State ─────────────────────────────────────────────────────
+let currentUser    = null;
+let currentSession = null;
+let selectedPlan   = null;
+let currentStep    = 1;
+let selectedColor  = '#2563eb';
+let selectedStyle  = '';
+let selectedType   = '';
+let generatedHTML  = '';
+let paystackRef    = null;
+let pendingPlan    = null;   // plan user wanted before they logged in
 
 // ─────────────────────────────────────────────────────────────
-//  AUTH — listen for session changes
+//  AUTH STATE
 // ─────────────────────────────────────────────────────────────
 sb.auth.onAuthStateChange((_event, session) => {
   currentSession = session;
@@ -34,17 +38,24 @@ sb.auth.onAuthStateChange((_event, session) => {
 });
 
 function updateAuthUI() {
-  const userInfo = document.getElementById('userInfo');
-  const authBtns = document.getElementById('authBtns');
-  if (!userInfo || !authBtns) return;
+  const userInfo   = document.getElementById('userInfo');
+  const authBtns   = document.getElementById('authBtns');
+  const signOutBtn = document.getElementById('signOutBtn');
+  const dashBtn    = document.getElementById('dashBtn');
+  if (!userInfo) return;
 
   if (currentUser) {
-    userInfo.textContent = currentUser.email;
-    userInfo.style.display = 'block';
-    authBtns.style.display = 'none';
+    const name = currentUser.user_metadata?.full_name || currentUser.email.split('@')[0];
+    userInfo.textContent     = '👤 ' + name;
+    userInfo.style.display   = 'inline-block';
+    authBtns.style.display   = 'none';
+    signOutBtn.style.display = 'inline-block';
+    if (dashBtn) dashBtn.style.display = 'inline-block';
   } else {
-    userInfo.style.display = 'none';
-    authBtns.style.display = 'flex';
+    userInfo.style.display   = 'none';
+    authBtns.style.display   = 'flex';
+    signOutBtn.style.display = 'none';
+    if (dashBtn) dashBtn.style.display = 'none';
   }
 }
 
@@ -55,20 +66,18 @@ function openAuthModal(mode = 'login') {
   document.getElementById('authModal').classList.add('open');
   setAuthMode(mode);
 }
-
 function closeAuthModal() {
   document.getElementById('authModal').classList.remove('open');
   clearAuthError();
 }
-
 function setAuthMode(mode) {
   const isLogin = mode === 'login';
-  document.getElementById('authModalTitle').textContent   = isLogin ? 'Sign In' : 'Create Account';
-  document.getElementById('authSubmitBtn').textContent    = isLogin ? 'Sign In' : 'Create Account';
-  document.getElementById('authSwitchText').textContent   = isLogin ? "Don't have an account?" : 'Already have an account?';
-  document.getElementById('authSwitchLink').textContent   = isLogin ? 'Sign up' : 'Sign in';
-  document.getElementById('authSwitchLink').onclick       = () => setAuthMode(isLogin ? 'signup' : 'login');
-  document.getElementById('authSubmitBtn').onclick        = isLogin ? handleLogin : handleSignup;
+  document.getElementById('authModalTitle').textContent  = isLogin ? 'Welcome back' : 'Create your account';
+  document.getElementById('authSubmitBtn').textContent   = isLogin ? 'Sign In' : 'Create Account';
+  document.getElementById('authSwitchText').textContent  = isLogin ? "Don't have an account?" : 'Already have an account?';
+  document.getElementById('authSwitchLink').textContent  = isLogin ? 'Sign up free' : 'Sign in';
+  document.getElementById('authSwitchLink').onclick      = () => setAuthMode(isLogin ? 'signup' : 'login');
+  document.getElementById('authSubmitBtn').onclick       = isLogin ? handleLogin : handleSignup;
   document.getElementById('authNameGroup').style.display = isLogin ? 'none' : 'block';
   clearAuthError();
 }
@@ -77,61 +86,138 @@ async function handleSignup() {
   const email    = document.getElementById('authEmail').value.trim();
   const password = document.getElementById('authPassword').value;
   const name     = document.getElementById('authName').value.trim();
-
-  if (!email || !password) { setAuthError('Please fill in all fields.'); return; }
-  if (password.length < 6) { setAuthError('Password must be at least 6 characters.'); return; }
-
+  if (!email || !password)  { setAuthError('Please fill in all fields.'); return; }
+  if (password.length < 6)  { setAuthError('Password must be at least 6 characters.'); return; }
   setAuthLoading(true);
-  const { error } = await sb.auth.signUp({
-    email, password,
-    options: { data: { full_name: name } }
-  });
+  const { error } = await sb.auth.signUp({ email, password, options: { data: { full_name: name } } });
   setAuthLoading(false);
-
   if (error) { setAuthError(error.message); return; }
   closeAuthModal();
-  showToast('Account created! You are now signed in.', 'success');
+  showToast('Account created! Welcome to SiteCraft 🎉', 'success');
+  if (pendingPlan) { setTimeout(() => continueToPendingPlan(), 400); }
 }
 
 async function handleLogin() {
   const email    = document.getElementById('authEmail').value.trim();
   const password = document.getElementById('authPassword').value;
-
   if (!email || !password) { setAuthError('Please enter your email and password.'); return; }
-
   setAuthLoading(true);
   const { error } = await sb.auth.signInWithPassword({ email, password });
   setAuthLoading(false);
-
-  if (error) { setAuthError('Invalid email or password.'); return; }
+  if (error) { setAuthError('Incorrect email or password. Please try again.'); return; }
   closeAuthModal();
-  showToast('Welcome back!', 'success');
+  showToast('Welcome back! 👋', 'success');
+  if (pendingPlan) { setTimeout(() => continueToPendingPlan(), 400); }
 }
 
 async function handleSignOut() {
   await sb.auth.signOut();
-  showToast('Signed out.', 'success');
+  location.reload();
+}
+
+function continueToPendingPlan() {
+  if (!pendingPlan) return;
+  selectedPlan = pendingPlan;
+  pendingPlan  = null;
+  document.getElementById('checkoutPlanName').textContent  = selectedPlan.name + ' Landing Page';
+  document.getElementById('checkoutPlanPrice').textContent = '₦' + selectedPlan.price.toLocaleString();
+  document.getElementById('payerEmail').value              = currentUser.email;
+  document.getElementById('landing').style.display  = 'none';
+  document.getElementById('pricing').style.display  = 'none';
+  document.getElementById('checkout').style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function setAuthError(msg) {
   const el = document.getElementById('authError');
-  el.textContent = msg;
-  el.style.display = 'block';
+  el.textContent    = msg;
+  el.style.display  = 'block';
 }
-
 function clearAuthError() {
   const el = document.getElementById('authError');
   if (el) { el.textContent = ''; el.style.display = 'none'; }
 }
-
 function setAuthLoading(loading) {
   const btn = document.getElementById('authSubmitBtn');
-  btn.disabled = loading;
+  btn.disabled    = loading;
   btn.textContent = loading ? 'Please wait…' : btn.textContent;
 }
 
 // ─────────────────────────────────────────────────────────────
-//  NAV + SECTION TRANSITIONS
+//  DASHBOARD
+// ─────────────────────────────────────────────────────────────
+async function openDashboard() {
+  if (!currentUser) { openAuthModal('login'); return; }
+  document.getElementById('dashboardModal').classList.add('open');
+  await loadDashboard();
+}
+
+function closeDashboard() {
+  document.getElementById('dashboardModal').classList.remove('open');
+}
+
+async function loadDashboard() {
+  const list = document.getElementById('dashboardList');
+  list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted);">Loading your pages…</div>';
+
+  const { data, error } = await sb
+    .from('generated_pages')
+    .select('*, orders(plan_name, amount, paid_at)')
+    .eq('user_id', currentUser.id)
+    .order('created_at', { ascending: false });
+
+  if (error || !data?.length) {
+    list.innerHTML = `
+      <div style="text-align:center;padding:48px 24px;">
+        <div style="font-size:2.5rem;margin-bottom:16px;">📄</div>
+        <div style="font-weight:700;margin-bottom:8px;">No pages yet</div>
+        <div style="color:var(--muted);font-size:0.875rem;">Your generated landing pages will appear here.</div>
+      </div>`;
+    return;
+  }
+
+  list.innerHTML = data.map(page => {
+    const order   = page.orders;
+    const date    = new Date(page.created_at).toLocaleDateString('en-NG', { day:'numeric', month:'short', year:'numeric' });
+    const amount  = order ? '₦' + order.amount.toLocaleString() : '—';
+    const plan    = order?.plan_name || '—';
+    return `
+      <div class="dash-item">
+        <div class="dash-item-info">
+          <div class="dash-item-name">${page.business_name || 'Untitled Page'}</div>
+          <div class="dash-item-meta">${page.page_type || 'Landing Page'} · ${plan} · ${amount} · ${date}</div>
+        </div>
+        <div class="dash-item-actions">
+          <button class="dash-btn" onclick="previewDashPage('${page.id}')">Preview</button>
+          <button class="dash-btn dash-btn-primary" onclick="downloadDashPage('${page.id}', '${page.business_name || 'page'}')">Download</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Cache pages data for preview/download
+  window._dashPages = data;
+}
+
+function previewDashPage(id) {
+  const page = window._dashPages?.find(p => p.id === id);
+  if (!page) return;
+  const blob = new Blob([page.html], { type: 'text/html' });
+  window.open(URL.createObjectURL(blob), '_blank');
+}
+
+function downloadDashPage(id, name) {
+  const page = window._dashPages?.find(p => p.id === id);
+  if (!page) return;
+  const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  const blob = new Blob([page.html], { type: 'text/html' });
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = slug + '.html';
+  a.click();
+}
+
+// ─────────────────────────────────────────────────────────────
+//  NAVIGATION
 // ─────────────────────────────────────────────────────────────
 function scrollToPricing() {
   document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' });
@@ -153,21 +239,22 @@ function goBack(from, to) {
 //  PLAN SELECTION
 // ─────────────────────────────────────────────────────────────
 function selectPlan(card) {
-  // Must be logged in to proceed
+  const plan = {
+    type:  card.dataset.plan,
+    price: parseInt(card.dataset.price),
+    name:  card.querySelector('.plan-name').textContent
+  };
+
   if (!currentUser) {
-    showToast('Please sign in or create an account first.', 'error');
+    pendingPlan = plan;
+    showToast('Create a free account to continue.', 'success');
     openAuthModal('signup');
     return;
   }
 
   document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
   card.classList.add('selected');
-
-  selectedPlan = {
-    type:  card.dataset.plan,
-    price: parseInt(card.dataset.price),
-    name:  card.querySelector('.plan-name').textContent
-  };
+  selectedPlan = plan;
 
   document.getElementById('checkoutPlanName').textContent  = selectedPlan.name + ' Landing Page';
   document.getElementById('checkoutPlanPrice').textContent = '₦' + selectedPlan.price.toLocaleString();
@@ -182,15 +269,14 @@ function selectPlan(card) {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  PAYMENT — Paystack → confirm with Edge Function
+//  PAYMENT
 // ─────────────────────────────────────────────────────────────
 function initiatePayment() {
   const name  = document.getElementById('payerName').value.trim();
   const email = document.getElementById('payerEmail').value.trim();
-
-  if (!name || !email)         { showToast('Please fill in your name and email.', 'error'); return; }
-  if (!email.includes('@'))    { showToast('Please enter a valid email.', 'error'); return; }
-  if (!currentUser)            { showToast('Please sign in first.', 'error'); openAuthModal('login'); return; }
+  if (!name || !email)      { showToast('Please fill in your name and email.', 'error'); return; }
+  if (!email.includes('@')) { showToast('Please enter a valid email address.', 'error'); return; }
+  if (!currentUser)         { openAuthModal('login'); return; }
 
   const btn = document.getElementById('payBtn');
   btn.disabled    = true;
@@ -204,22 +290,20 @@ function initiatePayment() {
     ref:      'SC_' + Date.now(),
     metadata: {
       custom_fields: [
-        { display_name: 'Name',  variable_name: 'name',  value: name },
-        { display_name: 'Plan',  variable_name: 'plan',  value: selectedPlan.name }
+        { display_name: 'Name', variable_name: 'name', value: name },
+        { display_name: 'Plan', variable_name: 'plan', value: selectedPlan.name }
       ]
     },
     callback(response) {
       btn.disabled    = false;
       btn.innerHTML   = '🔒 Pay & Start Building';
       paystackRef     = response.reference;
-
       showToast('Payment received! Confirming…', 'success');
-      // Paystack requires a sync callback — kick off async work separately
       confirmPayment(paystackRef);
     },
     onClose() {
-      btn.disabled    = false;
-      btn.innerHTML   = '🔒 Pay & Start Building';
+      btn.disabled  = false;
+      btn.innerHTML = '🔒 Pay & Start Building';
       showToast('Payment window closed.', 'error');
     }
   }).openIframe();
@@ -227,21 +311,15 @@ function initiatePayment() {
 
 async function confirmPayment(ref) {
   try {
-    const res  = await callEdgeFunction('confirm-payment', {
+    const res = await callEdgeFunction('confirm-payment', {
       paystackRef: ref,
       planType:    selectedPlan.type,
       planName:    selectedPlan.name,
       amount:      selectedPlan.price
     });
-
-    if (!res.success) {
-      showToast('Payment confirmation failed: ' + res.error, 'error');
-      return;
-    }
-
-    showToast('Payment confirmed ✓', 'success');
+    if (!res.success) { showToast('Payment confirmation failed: ' + res.error, 'error'); return; }
+    showToast('Payment confirmed ✓ Let\'s build your page!', 'success');
     launchBuilder();
-
   } catch (err) {
     showToast('Could not confirm payment. Please contact support.', 'error');
     console.error('confirmPayment error:', err);
@@ -259,20 +337,16 @@ function launchBuilder() {
 // ─────────────────────────────────────────────────────────────
 function goStep(step) {
   if (step > currentStep) {
-    if (currentStep === 1 && !selectedType) {
-      showToast('Please select a page type.', 'error'); return;
-    }
+    if (currentStep === 1 && !selectedType) { showToast('Please select a page type.', 'error'); return; }
     if (currentStep === 2 && !document.getElementById('b_name').value.trim()) {
       showToast('Please enter your business or product name.', 'error'); return;
     }
   }
-
   document.getElementById('bs-' + currentStep).classList.remove('active');
-  const oldDot = document.getElementById('si-' + currentStep);
-  oldDot.classList.remove('active');
-  oldDot.classList.add('done');
-  oldDot.querySelector('.step-dot').innerHTML = '✓';
-
+  const dot = document.getElementById('si-' + currentStep);
+  dot.classList.remove('active');
+  dot.classList.add('done');
+  dot.querySelector('.step-dot').innerHTML = '✓';
   currentStep = step;
   document.getElementById('bs-' + currentStep).classList.add('active');
   document.getElementById('si-' + currentStep).classList.add('active');
@@ -284,61 +358,61 @@ function selectType(card) {
   card.classList.add('selected');
   selectedType = card.dataset.type;
 }
-
 function selectStyle(card) {
   document.querySelectorAll('[data-style]').forEach(c => c.classList.remove('selected'));
   card.classList.add('selected');
   selectedStyle = card.dataset.style;
 }
-
 function selectColor(swatch) {
   document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
   swatch.classList.add('selected');
   selectedColor = swatch.dataset.color;
 }
-
 function setCustomColor(val) {
   selectedColor = val;
   document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
 }
+function toggleSection(label) {
+  const cb = label.querySelector('input[type="checkbox"]');
+  cb.checked = !cb.checked;
+  label.classList.toggle('checked', cb.checked);
+}
 
 // ─────────────────────────────────────────────────────────────
-//  GENERATION — calls Edge Function
+//  GENERATION
 // ─────────────────────────────────────────────────────────────
 async function generateSite() {
   if (!selectedStyle) { showToast('Please pick a design style.', 'error'); return; }
-  if (!currentUser)   { showToast('Please sign in first.', 'error'); openAuthModal('login'); return; }
+  if (!currentUser)   { openAuthModal('login'); return; }
   if (!paystackRef)   { showToast('No payment found. Please complete payment first.', 'error'); return; }
+
+  const getVal = id => document.getElementById(id)?.value.trim() ?? '';
 
   const userData = {
     type:        selectedType || 'business',
-    name:        document.getElementById('b_name').value.trim(),
-    tagline:     document.getElementById('b_tagline').value.trim(),
-    description: document.getElementById('b_desc').value.trim(),
-    audience:    document.getElementById('b_audience').value.trim(),
-    cta:         document.getElementById('b_cta').value.trim(),
-    phone:       document.getElementById('b_phone').value.trim(),
-    email:       document.getElementById('b_email').value.trim(),
+    name:        getVal('b_name'),
+    tagline:     getVal('b_tagline'),
+    description: getVal('b_desc'),
+    audience:    getVal('b_audience'),
+    cta:         getVal('b_cta'),
+    phone:       getVal('b_phone'),
+    email:       getVal('b_email'),
     color:       selectedColor,
     style:       selectedStyle,
     sections:    Array.from(document.querySelectorAll('.section-check:checked')).map(cb => cb.value),
-    extras:      document.getElementById('b_extras').value.trim()
+    extras:      getVal('b_extras')
   };
 
   document.getElementById('builder').style.display    = 'none';
   document.getElementById('generating').style.display = 'block';
   window.scrollTo({ top: 0, behavior: 'smooth' });
-
   animateGenSteps();
 
   try {
     const res = await callEdgeFunction('generate-page', { paystackRef, userData });
-
     if (!res.success) throw new Error(res.error || 'Generation failed');
-
     generatedHTML = res.html;
     setTimeout(() => showResult(res.html), 11000);
-
   } catch (err) {
     console.error('generateSite error:', err);
     showToast('Generation failed: ' + err.message, 'error');
@@ -364,44 +438,34 @@ function animateGenSteps() {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  SUPABASE EDGE FUNCTION HELPER
+//  EDGE FUNCTION HELPER
 // ─────────────────────────────────────────────────────────────
 async function callEdgeFunction(fnName, body) {
-  // Always get a fresh session from Supabase storage
-  const { data: { session: freshSession }, error: sessionError } = await sb.auth.getSession();
+  const { data: { session: fresh }, error } = await sb.auth.getSession();
 
-  if (sessionError || !freshSession) {
-    // Try a refresh as fallback
-    const { data: refreshData } = await sb.auth.refreshSession();
-    if (!refreshData?.session) {
-      openAuthModal('login');
-      throw new Error('Not authenticated — please sign in and try again.');
-    }
-    currentSession = refreshData.session;
-    currentUser    = refreshData.session.user;
-  } else {
-    currentSession = freshSession;
-    currentUser    = freshSession.user;
+  let session = fresh;
+  if (error || !session) {
+    const { data: r } = await sb.auth.refreshSession();
+    session = r?.session ?? null;
+    if (session) { currentSession = session; currentUser = session.user; }
   }
 
-  const token = currentSession.access_token;
-  console.log('[callEdgeFunction]', fnName, 'token prefix:', token?.slice(0, 20));
+  if (!session) {
+    openAuthModal('login');
+    throw new Error('Not authenticated — please sign in and try again.');
+  }
 
   const res = await fetch(`${SUPABASE_URL}/functions/v1/${fnName}`, {
     method:  'POST',
     headers: {
       'Content-Type':  'application/json',
-      'Authorization': `Bearer ${token}`,
+      'Authorization': `Bearer ${session.access_token}`,
       'apikey':        SUPABASE_ANON
     },
     body: JSON.stringify(body)
   });
 
-  console.log('[callEdgeFunction]', fnName, 'status:', res.status);
-
   if (res.status === 401) {
-    const errBody = await res.text();
-    console.error('[callEdgeFunction] 401 body:', errBody);
     showToast('Session expired. Please sign in again.', 'error');
     openAuthModal('login');
     throw new Error('Session expired');
@@ -422,7 +486,7 @@ function showResult(html) {
   const doc   = frame.contentDocument || frame.contentWindow.document;
   doc.open(); doc.write(html); doc.close();
 
-  const name = document.getElementById('b_name').value.trim() || 'my-page';
+  const name = document.getElementById('b_name')?.value.trim() || 'my-page';
   const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
   document.getElementById('previewUrl').textContent = slug + '.html';
 
@@ -431,7 +495,6 @@ function showResult(html) {
   const btn  = document.getElementById('downloadBtn');
   btn.href     = url;
   btn.download = slug + '.html';
-
   document.getElementById('codeBlock').textContent = html;
   showToast('Your landing page is ready! 🎉', 'success');
 }
@@ -443,12 +506,10 @@ function toggleCode() {
   block.style.display = show ? 'block' : 'none';
   btn.textContent     = show ? 'Hide HTML Code' : 'View HTML Code';
 }
-
 function openFullPreview() {
   const blob = new Blob([generatedHTML], { type: 'text/html' });
   window.open(URL.createObjectURL(blob), '_blank');
 }
-
 function startOver() { location.reload(); }
 
 // ─────────────────────────────────────────────────────────────
@@ -462,27 +523,19 @@ function showToast(msg, type = 'success') {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  SECTION TOGGLE (also called inline from HTML)
-// ─────────────────────────────────────────────────────────────
-function toggleSection(label) {
-  const cb = label.querySelector('input[type="checkbox"]');
-  cb.checked = !cb.checked;
-  label.classList.toggle('checked', cb.checked);
-}
-
-// ─────────────────────────────────────────────────────────────
-//  INIT
+//  INIT — restore session on page load
 // ─────────────────────────────────────────────────────────────
 window.addEventListener('load', async () => {
   ['checkout', 'builder', 'generating', 'result'].forEach(id => {
     document.getElementById(id).style.display = 'none';
   });
 
-  // Restore session if user was already logged in
+  // Supabase persists session in localStorage automatically
+  // This just syncs our local state with whatever is stored
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
-    currentUser    = session.user;
     currentSession = session;
+    currentUser    = session.user;
     updateAuthUI();
   }
 });
