@@ -4,6 +4,25 @@ const SUPABASE_URL     = 'https://zmmrersjvlapqhfndlno.supabase.co';
 const SUPABASE_ANON    = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InptbXJlcnNqdmxhcHFoZm5kbG5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNzg0OTAsImV4cCI6MjA4Nzk1NDQ5MH0.neynEzGdJsjuH5RE_vtcY1TJ2kgspyBAmgjTF2ItGMI';
 const PAYSTACK_PUB_KEY = 'pk_test_0382ed3e2734cca81d7d4a3c832d7457bcf9c5da';
 
+// ── GITHUB PAGES SUBPATH FIX ──────────────────────────────────
+// Supabase's detectSessionInUrl strips the subpath when cleaning the OAuth hash.
+// We intercept history.replaceState once to preserve the correct path.
+(function fixOAuthRedirectPath() {
+  if (window.location.hash && window.location.hash.includes('access_token')) {
+    const correctPath = window.location.pathname; // e.g. /SiteCraft/
+    const _orig = history.replaceState.bind(history);
+    history.replaceState = function(state, title, url) {
+      // If Supabase tries to replace with root, keep our correct subpath
+      if (!url || url === '/' || url === window.location.origin + '/') {
+        _orig(state, title, correctPath);
+      } else {
+        _orig(state, title, url);
+      }
+      history.replaceState = _orig; // restore after one use
+    };
+  }
+})();
+
 const { createClient } = supabase;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
