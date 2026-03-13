@@ -120,8 +120,11 @@ async function handleSignOut() {
 
 // ── GOOGLE SIGN IN ────────────────────────────────────────────
 async function handleGoogleSignIn() {
-  // Use current page URL so it works on any host (localhost, GitHub Pages, sitecraft.ng)
-  const redirectTo = window.location.origin + window.location.pathname;
+  // Build exact redirect URL — strips any existing hash/query so Supabase token lands cleanly
+  const url  = window.location.href;
+  const base = url.split('#')[0].split('?')[0];
+  // Ensure trailing slash for GitHub Pages compatibility
+  const redirectTo = base.endsWith('/') ? base : base + '/';
   const { error } = await sb.auth.signInWithOAuth({
     provider: 'google',
     options: { redirectTo, queryParams: { prompt: 'select_account' } }
