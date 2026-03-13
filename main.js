@@ -120,9 +120,11 @@ async function handleSignOut() {
 
 // ── GOOGLE SIGN IN ────────────────────────────────────────────
 async function handleGoogleSignIn() {
+  // Use current page URL so it works on any host (localhost, GitHub Pages, sitecraft.ng)
+  const redirectTo = window.location.origin + window.location.pathname;
   const { error } = await sb.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: window.location.origin, queryParams: { prompt: 'select_account' } }
+    options: { redirectTo, queryParams: { prompt: 'select_account' } }
   });
   if (error) setAuthError('Google sign-in failed. Please try again.');
 }
@@ -461,6 +463,23 @@ window.addEventListener('load', async () => {
   ['checkout', 'builder', 'generating', 'result'].forEach(id => {
     document.getElementById(id).style.display = 'none';
   });
-  const { data: { session } } = await sb.auth.getSession();
-  if (session) { currentSession = session; currentUser = session.user; updateAuthUI(); }
+
+  // Handle OAuth redirect — Supabase puts tokens in the URL hash
+  // detectSessionInUrl:true handles this, but we need to wait for it
+  const hash = window.location.hash;
+  if (hash && hash.includes('access_token')) {
+    // Let Supabase parse the hash and establish the session
+    const { data: { session }, error } = await sb.auth.getSession();
+    if (session) {
+      currentSession = session;
+      currentUser    = session.user;
+      updateAuthUI();
+      showToast('Signed in with Google! Welcome, ' + (session.user.user_metadata?.full_name || session.user.email.split('@')[0]) + ' 👋', 'success');
+    }
+    // Clean the URL — remove the ugly token hash
+    history.replaceState(null, '', window.location.pathname);
+  } else {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) { currentSession = session; currentUser = session.user; updateAuthUI(); }
+  }
 });
